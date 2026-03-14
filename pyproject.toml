@@ -1,0 +1,40 @@
+[build-system]
+requires = ["setuptools>=69", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "pixelvae-pytorch"
+version = "0.1.0"
+description = "PyTorch translation of the original PixelVAE repository."
+readme = "README.md"
+requires-python = ">=3.12"
+license = { text = "MIT" }
+keywords = ["pixelvae", "vae", "pixelcnn", "pytorch", "generative-models"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Science/Research",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+]
+dependencies = [
+    "numpy>=2.4.3",
+    "pillow>=11.0.0",
+    "torch>=2.7.0",
+]
+
+[project.scripts]
+pixelvae-smoke-test = "PixelVAEPytorch.smoke_test:main"
+pixelvae-sample = "PixelVAEPytorch.pixelvae:main"
+pixelvae-train-mnist = "PixelVAEPytorch.mnist_pixelvae_train:main"
+pixelvae-eval-mnist = "PixelVAEPytorch.mnist_pixelvae_evaluate:main"
+
+[tool.setuptools]
+packages = ["PixelVAEPytorch"]
+
+[tool.setuptools.package-dir]
+PixelVAEPytorch = "."
+
+[tool.uv]
+cache-dir = "./.uv_cache"
