@@ -10,89 +10,44 @@ from .losses import kl_unit_gaussian
 from .ops import make_conv2d, make_deconv2d, make_linear
 
 
-def _pixcnn_gate(inputs: torch.Tensor) -> torch.Tensor:
-    return torch.tanh(inputs[:, 0::2]) * torch.sigmoid(inputs[:, 1::2])
-
-
-class _ConditionalGate(nn.Module):
-    def __init__(self, latent_dim: int, dim: int) -> None:
-        super().__init__()
-        self.to_tanh = make_linear(latent_dim, dim, weightnorm=True)
-        self.to_sigmoid = make_linear(latent_dim, dim, weightnorm=True)
-
-    def forward(self, inputs: torch.Tensor, latents: torch.Tensor) -> torch.Tensor:
-        a = inputs[:, 0::2] + self.to_tanh(latents).unsqueeze(-1).unsqueeze(-1)
-        b = inputs[:, 1::2] + self.to_sigmoid(latents).unsqueeze(-1).unsqueeze(-1)
-        return torch.tanh(a) * torch.sigmoid(b)
-
-
 class _MNISTPixelCNNLayer(nn.Module):
     def __init__(
         self,
         input_dim: int,
-        dim_pix: int,
+        output_dim: int,
         filter_size: int,
         n_channels: int,
         *,
+        mask_type: str,
         latent_dim: int | None = None,
         conditioned: bool = False,
-        hstack: str = "hstack",
         residual: bool = True,
     ) -> None:
         super().__init__()
         self.conditioned = conditioned
         self.residual = residual
-        self.vstack = make_conv2d(
+        self.conv = make_conv2d(
             input_dim,
-            2 * dim_pix,
+            output_dim,
             filter_size,
-            mask_type="vstack",
+            mask_type=mask_type,
             mask_n_channels=n_channels,
             weightnorm=True,
         )
-        self.v2h = make_conv2d(2 * dim_pix, 2 * dim_pix, 1, weightnorm=True)
-        self.hstack = make_conv2d(
-            input_dim,
-            2 * dim_pix,
-            (1, filter_size),
-            mask_type=hstack,
-            mask_n_channels=n_channels,
-            weightnorm=True,
-        )
-        self.h2h = make_conv2d(dim_pix, dim_pix, 1, weightnorm=True)
         if conditioned:
             if latent_dim is None:
                 raise ValueError("conditioned PixelCNN layers require latent_dim")
-            self.v_gate = _ConditionalGate(latent_dim, dim_pix)
-            self.h_gate = _ConditionalGate(latent_dim, dim_pix)
+            self.latent_bias = make_linear(latent_dim, output_dim, weightnorm=True)
 
-    def forward(
-        self,
-        x_v: torch.Tensor,
-        x_h: torch.Tensor,
-        latents: torch.Tensor | None = None,
-    ) -> tuple[torch.Tensor, torch.Tensor]:
-        zero_pad = torch.zeros(x_v.size(0), x_v.size(1), 1, x_v.size(3), device=x_v.device, dtype=x_v.dtype)
-        x_v_padded = torch.cat([zero_pad, x_v], dim=2)
-
-        x_v_next = self.vstack(x_v_padded)
+    def forward(self, inputs: torch.Tensor, latents: torch.Tensor | None = None) -> torch.Tensor:
+        output = self.conv(inputs)
         if self.conditioned:
-            x_v_next_gated = self.v_gate(x_v_next, latents)
-        else:
-            x_v_next_gated = _pixcnn_gate(x_v_next)
-
-        x_v2h = self.v2h(x_v_next[:, :, :-1, :])
-        x_h_next = self.hstack(x_h)
-        if self.conditioned:
-            x_h_next = self.h_gate(x_h_next + x_v2h, latents)
-        else:
-            x_h_next = _pixcnn_gate(x_h_next + x_v2h)
-        x_h_next = self.h2h(x_h_next)
-
-        if self.residual:
-            x_h_next = x_h_next + x_h
-
-        return x_v_next_gated[:, :, 1:, :], x_h_next
+            bias = self.latent_bias(latents).unsqueeze(-1).unsqueeze(-1)
+            output = output + bias
+        output = F.relu(output)
+        if self.residual and inputs.shape == output.shape:
+            output = output + inputs
+        return output
 
 
 class _MNISTEncoder(nn.Module):
@@ -148,26 +103,27 @@ class _MNISTUpsampleDecoder(nn.Module):
 
         self.input_stack = _MNISTPixelCNNLayer(
             input_dim=n_channels + 32,
-            dim_pix=dim_pix,
+            output_dim=dim_pix,
             filter_size=7,
             n_channels=n_channels,
-            hstack="hstack_a",
+            mask_type="a",
             residual=False,
         )
         self.stacks = nn.ModuleList(
             [
                 _MNISTPixelCNNLayer(
                     input_dim=dim_pix,
-                    dim_pix=dim_pix,
+                    output_dim=dim_pix,
                     filter_size=filter_size,
                     n_channels=n_channels,
+                    mask_type="b",
                 )
                 for _ in range(num_pixel_cnn_layer)
             ]
         )
-        self.out1 = make_conv2d(dim_pix, 2 * 32, 1, weightnorm=True)
-        self.out2 = make_conv2d(32, 2 * 32, 1, weightnorm=True)
-        self.out3 = make_conv2d(32, n_channels, 1, he_init=False, weightnorm=True)
+        self.out1 = make_conv2d(dim_pix, dim_pix, 1, mask_type="b", mask_n_channels=n_channels, weightnorm=True)
+        self.out2 = make_conv2d(dim_pix, dim_pix, 1, mask_type="b", mask_n_channels=n_channels, weightnorm=True)
+        self.out3 = make_conv2d(dim_pix, n_channels, 1, mask_type="b", mask_n_channels=n_channels, he_init=False, weightnorm=True)
 
     def forward(self, latents: torch.Tensor, images: torch.Tensor) -> torch.Tensor:
         output = self.fc(latents).view(latents.size(0), 64, 4, 4)
@@ -183,12 +139,12 @@ class _MNISTUpsampleDecoder(nn.Module):
         output = F.relu(self.conv8(output))
 
         images_with_latent = torch.cat([images, output], dim=1)
-        x_v, x_h = self.input_stack(images_with_latent, images_with_latent)
+        output = self.input_stack(images_with_latent)
         for layer in self.stacks:
-            x_v, x_h = layer(x_v, x_h)
+            output = layer(output)
 
-        output = _pixcnn_gate(self.out1(x_h))
-        output = _pixcnn_gate(self.out2(output))
+        output = F.relu(self.out1(output))
+        output = F.relu(self.out2(output))
         return self.out3(output)
 
 
@@ -204,39 +160,40 @@ class _MNISTCondZBiasDecoder(nn.Module):
         super().__init__()
         self.input_stack = _MNISTPixelCNNLayer(
             input_dim=n_channels,
-            dim_pix=dim_pix,
+            output_dim=dim_pix,
             filter_size=7,
             n_channels=n_channels,
+            mask_type="a",
             latent_dim=latent_dim,
             conditioned=True,
-            hstack="hstack_a",
             residual=False,
         )
         self.stacks = nn.ModuleList(
             [
                 _MNISTPixelCNNLayer(
                     input_dim=dim_pix,
-                    dim_pix=dim_pix,
+                    output_dim=dim_pix,
                     filter_size=filter_size,
                     n_channels=n_channels,
+                    mask_type="b",
                     latent_dim=latent_dim,
                     conditioned=True,
                 )
                 for _ in range(num_pixel_cnn_layer)
             ]
         )
-        self.out1 = make_conv2d(dim_pix, 2 * dim_pix, 1, weightnorm=True)
-        self.out1_gate = _ConditionalGate(latent_dim, dim_pix)
-        self.out2 = make_conv2d(dim_pix, 2 * dim_pix, 1, weightnorm=True)
-        self.out2_gate = _ConditionalGate(latent_dim, dim_pix)
-        self.out3 = make_conv2d(dim_pix, n_channels, 1, he_init=False, weightnorm=True)
+        self.out1 = make_conv2d(dim_pix, dim_pix, 1, mask_type="b", mask_n_channels=n_channels, weightnorm=True)
+        self.out1_bias = make_linear(latent_dim, dim_pix, weightnorm=True)
+        self.out2 = make_conv2d(dim_pix, dim_pix, 1, mask_type="b", mask_n_channels=n_channels, weightnorm=True)
+        self.out2_bias = make_linear(latent_dim, dim_pix, weightnorm=True)
+        self.out3 = make_conv2d(dim_pix, n_channels, 1, mask_type="b", mask_n_channels=n_channels, he_init=False, weightnorm=True)
 
     def forward(self, latents: torch.Tensor, images: torch.Tensor) -> torch.Tensor:
-        x_v, x_h = self.input_stack(images, images, latents)
+        output = self.input_stack(images, latents)
         for layer in self.stacks:
-            x_v, x_h = layer(x_v, x_h, latents)
-        output = self.out1_gate(self.out1(x_h), latents)
-        output = self.out2_gate(self.out2(output), latents)
+            output = layer(output, latents)
+        output = F.relu(self.out1(output) + self.out1_bias(latents).unsqueeze(-1).unsqueeze(-1))
+        output = F.relu(self.out2(output) + self.out2_bias(latents).unsqueeze(-1).unsqueeze(-1))
         return self.out3(output)
 
 

@@ -9,10 +9,8 @@ class PixelVAEConfig:
     dataset: str
     settings: str
     mode: str
-    embed_inputs: bool
     pixel_level_pixcnn: bool
     higher_level_pixcnn: bool
-    dim_embed: int
     dim_pix_1: int
     dim_1: int
     dim_2: int
@@ -20,10 +18,8 @@ class PixelVAEConfig:
     dim_4: int
     dim_pix_2: Optional[int]
     latent_dim_2: int
-    alpha1_iters: int
-    alpha2_iters: int
+    alpha_iters: int
     kl_penalty: float
-    beta_iters: int
     pix_2_n_blocks: int
     lr: float
     lr_decay_after: int
@@ -43,10 +39,8 @@ _CONFIGS = {
         dataset="mnist_256",
         settings="mnist_256",
         mode="one_level",
-        embed_inputs=True,
         pixel_level_pixcnn=True,
         higher_level_pixcnn=True,
-        dim_embed=16,
         dim_pix_1=32,
         dim_1=16,
         dim_2=32,
@@ -54,10 +48,8 @@ _CONFIGS = {
         dim_4=64,
         dim_pix_2=None,
         latent_dim_2=128,
-        alpha1_iters=5000,
-        alpha2_iters=5000,
+        alpha_iters=5000,
         kl_penalty=1.0,
-        beta_iters=1000,
         pix_2_n_blocks=1,
         lr=1e-3,
         lr_decay_after=250000,
@@ -74,10 +66,8 @@ _CONFIGS = {
         dataset="lsun_32",
         settings="32px_small",
         mode="two_level",
-        embed_inputs=True,
         pixel_level_pixcnn=True,
         higher_level_pixcnn=True,
-        dim_embed=16,
         dim_pix_1=128,
         dim_1=64,
         dim_2=128,
@@ -86,10 +76,8 @@ _CONFIGS = {
         dim_pix_2=512,
         latent_dim_1=64,
         latent_dim_2=512,
-        alpha1_iters=2000,
-        alpha2_iters=5000,
+        alpha_iters=2000,
         kl_penalty=1.0,
-        beta_iters=1000,
         pix_2_n_blocks=1,
         lr=1e-3,
         lr_decay_after=180000,
@@ -105,10 +93,8 @@ _CONFIGS = {
         dataset="lsun_32",
         settings="32px_big",
         mode="two_level",
-        embed_inputs=False,
         pixel_level_pixcnn=True,
         higher_level_pixcnn=True,
-        dim_embed=16,
         dim_pix_1=256,
         dim_1=128,
         dim_2=256,
@@ -117,10 +103,8 @@ _CONFIGS = {
         dim_pix_2=512,
         latent_dim_1=128,
         latent_dim_2=512,
-        alpha1_iters=2000,
-        alpha2_iters=5000,
+        alpha_iters=2000,
         kl_penalty=1.0,
-        beta_iters=1000,
         pix_2_n_blocks=1,
         lr=1e-3,
         lr_decay_after=300000,
@@ -136,10 +120,8 @@ _CONFIGS = {
         dataset="lsun_64",
         settings="64px_small",
         mode="two_level",
-        embed_inputs=True,
         pixel_level_pixcnn=True,
         higher_level_pixcnn=True,
-        dim_embed=16,
         dim_pix_1=128,
         dim_0=64,
         dim_1=64,
@@ -149,10 +131,8 @@ _CONFIGS = {
         dim_pix_2=256,
         latent_dim_1=64,
         latent_dim_2=512,
-        alpha1_iters=2000,
-        alpha2_iters=10000,
+        alpha_iters=2000,
         kl_penalty=1.0,
-        beta_iters=1000,
         pix_2_n_blocks=1,
         lr=1e-3,
         lr_decay_after=180000,
@@ -168,10 +148,8 @@ _CONFIGS = {
         dataset="imagenet_64",
         settings="64px_big",
         mode="two_level",
-        embed_inputs=True,
         pixel_level_pixcnn=True,
         higher_level_pixcnn=True,
-        dim_embed=16,
         dim_pix_1=384,
         dim_0=192,
         dim_1=256,
@@ -181,10 +159,8 @@ _CONFIGS = {
         dim_pix_2=512,
         latent_dim_1=64,
         latent_dim_2=512,
-        alpha1_iters=1000,
-        alpha2_iters=10000,
+        alpha_iters=1000,
         kl_penalty=1.0,
-        beta_iters=500,
         pix_2_n_blocks=1,
         lr=1e-3,
         lr_decay_after=180000,
@@ -200,10 +176,8 @@ _CONFIGS = {
         dataset="imagenet_64",
         settings="64px_big_onelevel",
         mode="one_level",
-        embed_inputs=True,
         pixel_level_pixcnn=True,
         higher_level_pixcnn=True,
-        dim_embed=16,
         dim_pix_1=384,
         dim_0=192,
         dim_1=256,
@@ -213,10 +187,8 @@ _CONFIGS = {
         dim_pix_2=512,
         latent_dim_1=64,
         latent_dim_2=512,
-        alpha1_iters=50000,
-        alpha2_iters=50000,
+        alpha_iters=50000,
         kl_penalty=1.0,
-        beta_iters=1000,
         pix_2_n_blocks=1,
         lr=1e-3,
         lr_decay_after=180000,

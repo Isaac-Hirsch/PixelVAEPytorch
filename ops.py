@@ -93,6 +93,8 @@ class MaskedConv2d(nn.Conv2d):
         padding: int | tuple[int, int] | None = None,
         bias: bool = True,
     ) -> None:
+        if mask_type not in {"a", "b"}:
+            raise ValueError(f"mask_type must be 'a' or 'b', got '{mask_type}'")
         kernel_size = _pair(kernel_size)
         if padding is None:
             padding = (kernel_size[0] // 2, kernel_size[1] // 2)
@@ -114,30 +116,21 @@ class MaskedConv2d(nn.Conv2d):
         center_row = kernel_h // 2
         center_col = kernel_w // 2
 
-        if center_row == 0:
-            mask[:, :, :, center_col + 1 :] = 0
-        elif center_col == 0:
-            mask[:, :, center_row + 1 :, :] = 0
-        else:
-            mask[:, :, center_row + 1 :, :] = 0
-            mask[:, :, center_row, center_col + 1 :] = 0
+        mask[:, :, center_row + 1 :, :] = 0
+        mask[:, :, center_row, center_col + 1 :] = 0
 
-        if self.mask_type in {"a", "b", "hstack_a", "hstack"}:
-            for in_group in range(self.mask_n_channels):
-                for out_group in range(self.mask_n_channels):
-                    block_current = (
-                        self.mask_type in {"a", "hstack_a"} and in_group >= out_group
-                    ) or (self.mask_type == "b" and in_group > out_group)
-                    if block_current:
-                        mask[
-                            out_group :: self.mask_n_channels,
-                            in_group :: self.mask_n_channels,
-                            center_row,
-                            center_col,
-                        ] = 0
-
-        if self.mask_type == "vstack":
-            mask[:, :, center_row, :] = 1
+        for in_group in range(self.mask_n_channels):
+            for out_group in range(self.mask_n_channels):
+                block_current = (
+                    self.mask_type == "a" and in_group >= out_group
+                ) or (self.mask_type == "b" and in_group > out_group)
+                if block_current:
+                    mask[
+                        out_group :: self.mask_n_channels,
+                        in_group :: self.mask_n_channels,
+                        center_row,
+                        center_col,
+                    ] = 0
 
         return mask
 
@@ -227,46 +220,3 @@ def make_linear(
     module = nn.Linear(input_dim, output_dim, bias=bias)
     init_linear(module, initialization=initialization, gain=gain)
     return _maybe_weightnorm(module, weightnorm)
-
-
-class SubpixelConv2d(nn.Module):
-    def __init__(
-        self,
-        input_dim: int,
-        output_dim: int,
-        filter_size: int,
-        *,
-        he_init: bool = True,
-        weightnorm: bool = False,
-        mask_type: str | None = None,
-        mask_n_channels: int = 1,
-        bias: bool = True,
-    ) -> None:
-        super().__init__()
-        self.conv = make_conv2d(
-            input_dim=input_dim,
-            output_dim=4 * output_dim,
-            filter_size=filter_size,
-            he_init=he_init,
-            mask_type=mask_type,
-            mask_n_channels=mask_n_channels,
-            weightnorm=weightnorm,
-            bias=bias,
-        )
-        self.shuffle = nn.PixelShuffle(2)
-
-    def forward(self, inputs: torch.Tensor) -> torch.Tensor:
-        return self.shuffle(self.conv(inputs))
-
-
-class ImageEmbedding(nn.Module):
-    def __init__(self, vocab_size: int, dim: int) -> None:
-        super().__init__()
-        self.embedding = nn.Embedding(vocab_size, dim)
-        nn.init.normal_(self.embedding.weight)
-
-    def forward(self, images: torch.Tensor) -> torch.Tensor:
-        embedded = self.embedding(images.long())
-        embedded = embedded.permute(0, 1, 4, 2, 3).contiguous()
-        batch, channels, dim, height, width = embedded.shape
-        return embedded.view(batch, channels * dim, height, width)
